@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CheckCircle, Loader2, Package, MapPin } from 'lucide-react';
+import { CheckCircle, Package, MapPin } from 'lucide-react';
 import { useCartStore } from '../stores/cartStore';
-import { supabase } from '../lib/supabase';
 import type { OrderItem } from '../types/database';
 import { formatPHP } from '../lib/formatCurrency';
 import { useDocumentHead } from '../hooks/useDocumentHead';
@@ -29,44 +28,20 @@ export const OrderSuccessPage = () => {
   const clearCart = useCartStore((state) => state.clearCart);
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get('order_id');
-  const [order, setOrder] = useState<OrderSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [order] = useState<OrderSummary | null>(() => {
+    if (!orderId) return null;
+    const cached = sessionStorage.getItem(`order_summary_${orderId}`);
+    if (!cached) return null;
+    try {
+      return JSON.parse(cached) as OrderSummary;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     clearCart();
   }, [clearCart]);
-
-  useEffect(() => {
-    const fetchOrder = async () => {
-      if (!orderId) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('id, customer_name, customer_email, customer_phone, shipping_address, shipping_city, shipping_province, shipping_zip, shipping_region, items, subtotal, shipping_fee, total')
-          .eq('id', orderId)
-          .single();
-
-        if (error) throw error;
-        setOrder(data);
-      } catch (err) {
-        console.error('Error fetching order:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchOrder();
-  }, [orderId]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
-      </div>
-    );
-  }
 
   return (
     <section className="py-24 min-h-screen flex items-center justify-center bg-zinc-50">

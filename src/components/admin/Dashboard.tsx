@@ -19,6 +19,10 @@ interface RecentOrder {
   created_at: string;
 }
 
+interface PaidOrderRow {
+  total: number;
+}
+
 export const Dashboard = () => {
   const [stats, setStats] = useState<Stats>({ totalProducts: 0, totalOrders: 0, totalRevenue: 0, pendingOrders: 0 });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
@@ -39,7 +43,8 @@ export const Dashboard = () => {
         console.error('Dashboard fetch error', { productsRes, ordersRes, paidRes, pendingRes, recentRes });
       }
 
-      const revenue = (paidRes.data || []).reduce((sum, o) => sum + Number((o as Record<string, unknown>).total || 0), 0);
+      const paidRows = (paidRes.data || []) as PaidOrderRow[];
+      const revenue = paidRows.reduce((sum, o) => sum + Number(o.total || 0), 0);
 
       setStats({
         totalProducts: productsRes.count || 0,
@@ -48,7 +53,7 @@ export const Dashboard = () => {
         pendingOrders: pendingRes.count || 0,
       });
 
-      setRecentOrders((recentRes.data || []) as unknown as RecentOrder[]);
+      setRecentOrders((recentRes.data || []) as RecentOrder[]);
       setLoading(false);
     };
     fetchStats();

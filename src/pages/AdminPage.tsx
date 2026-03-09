@@ -22,6 +22,16 @@ export const AdminPage = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'manager' | null>(null);
 
+  const fetchRole = async (userId: string) => {
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
+    setUserRole((data as { role: 'admin' | 'manager' } | null)?.role || null);
+    setLoading(false);
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -34,17 +44,6 @@ export const AdminPage = () => {
     });
     return () => subscription.unsubscribe();
   }, []);
-
-  const fetchRole = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .single();
-    console.log('[AdminPage] fetchRole:', { userId, data, error });
-    setUserRole((data as { role: 'admin' | 'manager' } | null)?.role || null);
-    setLoading(false);
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

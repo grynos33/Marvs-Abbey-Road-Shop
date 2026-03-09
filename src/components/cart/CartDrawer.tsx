@@ -27,7 +27,7 @@ export const CartDrawer = () => {
           >
             <div className="flex justify-between items-center mb-12">
               <h2 className="text-3xl font-display font-bold">YOUR CRATE</h2>
-              <button onClick={closeCart} className="p-2 hover:bg-black/5 rounded-full transition-colors">
+              <button onClick={closeCart} aria-label="Close cart" className="p-2 hover:bg-black/5 rounded-full transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -44,6 +44,7 @@ export const CartDrawer = () => {
                 </div>
                 <button
                   onClick={closeCart}
+                  aria-label="Continue shopping"
                   className="btn-luxury btn-luxury-filled"
                 >
                   START DIGGING
@@ -69,6 +70,7 @@ export const CartDrawer = () => {
                       <div className="flex items-center gap-3 mt-2">
                         <button
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          aria-label={`Decrease quantity for ${item.name}`}
                           className="w-7 h-7 rounded-full border border-zinc-200 flex items-center justify-center hover:bg-zinc-100 transition-colors"
                         >
                           <Minus className="w-3 h-3" />
@@ -76,12 +78,14 @@ export const CartDrawer = () => {
                         <span className="text-sm font-display font-bold w-6 text-center">{item.quantity}</span>
                         <button
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          aria-label={`Increase quantity for ${item.name}`}
                           className="w-7 h-7 rounded-full border border-zinc-200 flex items-center justify-center hover:bg-zinc-100 transition-colors"
                         >
                           <Plus className="w-3 h-3" />
                         </button>
                         <button
                           onClick={() => removeItem(item.id)}
+                          aria-label={`Remove ${item.name} from cart`}
                           className="ml-auto p-1.5 text-zinc-400 hover:text-red-500 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />

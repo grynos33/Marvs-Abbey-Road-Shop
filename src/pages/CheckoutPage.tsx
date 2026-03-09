@@ -7,6 +7,12 @@ import { REGIONS, getShippingFee } from '../lib/shipping';
 import { toast } from 'sonner';
 import { useDocumentHead } from '../hooks/useDocumentHead';
 
+interface CreateCheckoutResponse {
+  order_id?: string;
+  checkout_url?: string;
+  error?: string;
+}
+
 export const CheckoutPage = () => {
   useDocumentHead('Checkout');
   const { items, totalPrice } = useCartStore();
@@ -60,14 +66,39 @@ export const CheckoutPage = () => {
         }),
       });
 
-      const payload = await response.json();
+      const payload = (await response.json()) as CreateCheckoutResponse;
       if (!response.ok || !payload?.checkout_url) {
         const message = payload?.error || 'Failed to create PayMongo checkout session.';
         throw new Error(message);
       }
 
+      if (payload.order_id) {
+        const orderSummary = {
+          id: payload.order_id,
+          customer_name: formData.name,
+          customer_email: formData.email,
+          customer_phone: formData.phone,
+          shipping_address: formData.address,
+          shipping_city: formData.city,
+          shipping_province: formData.province,
+          shipping_zip: formData.zip,
+          shipping_region: formData.region,
+          items: items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            image_url: item.image,
+          })),
+          subtotal,
+          shipping_fee: shippingFee,
+          total,
+        };
+        sessionStorage.setItem(`order_summary_${payload.order_id}`, JSON.stringify(orderSummary));
+      }
+
       toast.success('Redirecting to secure payment...');
-      window.location.href = payload.checkout_url as string;
+      window.location.href = payload.checkout_url;
     } catch (err) {
       console.error('Checkout error:', err);
       toast.error(err instanceof Error ? err.message : 'Checkout failed. Please try again.');

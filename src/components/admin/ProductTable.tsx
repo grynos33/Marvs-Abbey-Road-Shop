@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Loader2, Search, Star } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { formatPHP } from '../../lib/formatCurrency';
@@ -14,17 +14,22 @@ export const ProductTable = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'hidden'>('all');
 
-  const fetchProducts = async () => {
-    setLoading(true);
+  const fetchProducts = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     const { data } = await supabase
       .from('products')
       .select('id, name, description, price, image_url, category, tags, color, stock, is_active, is_featured, created_at, updated_at')
       .order('created_at', { ascending: false });
     setProducts((data as Product[]) ?? []);
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { fetchProducts(); }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void fetchProducts(false);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchProducts]);
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -152,12 +157,14 @@ export const ProductTable = () => {
               </button>
               <button
                 onClick={() => setEditingProduct(product)}
+                aria-label={`Edit ${product.name}`}
                 className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
               >
                 <Pencil className="w-4 h-4" />
               </button>
               <button
                 onClick={() => handleDelete(product)}
+                aria-label={`Delete ${product.name}`}
                 className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
               >
                 <Trash2 className="w-4 h-4" />

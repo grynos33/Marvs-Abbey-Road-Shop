@@ -69,6 +69,7 @@ export const Header = () => {
                 <button
                   type="button"
                   onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }}
+                  aria-label="Close search"
                   className="p-2 hover:bg-black/5 rounded-full transition-colors"
                 >
                   <X className="w-4 h-4" />
@@ -77,6 +78,7 @@ export const Header = () => {
             ) : (
               <button
                 onClick={() => setIsSearchOpen(true)}
+                aria-label="Open search"
                 className="p-2 hover:bg-black/5 rounded-full transition-colors hidden md:block"
               >
                 <Search className="w-5 h-5" />
@@ -85,6 +87,7 @@ export const Header = () => {
 
             <button
               onClick={openCart}
+              aria-label="Open cart"
               className="relative p-2 hover:bg-black/5 rounded-full transition-colors"
             >
               <ShoppingBag className="w-5 h-5" />
@@ -94,6 +97,7 @@ export const Header = () => {
             </button>
             <button
               onClick={() => setIsMenuOpen(true)}
+              aria-label="Open menu"
               className="lg:hidden p-2 hover:bg-black/5 rounded-full transition-colors"
             >
               <Menu className="w-6 h-6" />

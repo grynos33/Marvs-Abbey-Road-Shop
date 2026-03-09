@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Loader2, Shield, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { UserRole } from '../../types/database';
@@ -12,60 +12,71 @@ export const UserTable = () => {
   const [inviteRole, setInviteRole] = useState<'admin' | 'manager'>('manager');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
+  const [error, setError] = useState('');
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('user_roles')
-      .select('id, user_id, role, created_at')
-      .order('created_at', { ascending: true });
+  const getAccessToken = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  }, []);
 
-    if (data) {
-      // Fetch emails from auth - we'll use the management API approach
-      // For now, store user_id and we'll display it
-      setUsers(data as unknown as UserRole[]);
+  const fetchUsers = useCallback(async (showLoading = true, resetError = true) => {
+    if (showLoading) setLoading(true);
+    if (resetError) setError('');
+    const token = await getAccessToken();
+    if (!token) {
+      setError('Session expired. Please sign in again.');
+      setLoading(false);
+      return;
     }
-    setLoading(false);
-  };
 
-  useEffect(() => { fetchUsers(); }, []);
+    const response = await fetch('/api/admin-users', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setError((payload?.error as string) || 'Failed to load users');
+      setLoading(false);
+      return;
+    }
+    setUsers((payload?.users as UserRole[]) ?? []);
+    setLoading(false);
+  }, [getAccessToken]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void fetchUsers(false, false);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchUsers]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setInviteLoading(true);
     setInviteError('');
+    const token = await getAccessToken();
+    if (!token) {
+      setInviteError('Session expired. Please sign in again.');
+      setInviteLoading(false);
+      return;
+    }
 
-    // Create the auth user via Supabase admin
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: inviteEmail,
-      password: invitePassword,
-      email_confirm: true,
-    });
-
-    if (authError) {
-      // Fallback: try signUp if admin API isn't available
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    const response = await fetch('/api/admin-users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
         email: inviteEmail,
         password: invitePassword,
-      });
-
-      if (signUpError) {
-        setInviteError(signUpError.message);
-        setInviteLoading(false);
-        return;
-      }
-
-      if (signUpData.user) {
-        await supabase.from('user_roles').insert({
-          user_id: signUpData.user.id,
-          role: inviteRole,
-        });
-      }
-    } else if (authData.user) {
-      await supabase.from('user_roles').insert({
-        user_id: authData.user.id,
         role: inviteRole,
-      });
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setInviteError((payload?.error as string) || 'Failed to create user');
+      setInviteLoading(false);
+      return;
     }
 
     setInviteEmail('');
@@ -73,13 +84,31 @@ export const UserTable = () => {
     setInviteRole('manager');
     setShowInvite(false);
     setInviteLoading(false);
-    fetchUsers();
+    await fetchUsers(false);
   };
 
   const handleDelete = async (userRole: UserRole) => {
     if (!confirm('Remove this user? They will no longer be able to access the admin panel.')) return;
-    await supabase.from('user_roles').delete().eq('id', userRole.id);
-    fetchUsers();
+    const token = await getAccessToken();
+    if (!token) {
+      setError('Session expired. Please sign in again.');
+      return;
+    }
+
+    const response = await fetch('/api/admin-users', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ id: userRole.id }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setError((payload?.error as string) || 'Failed to remove user');
+      return;
+    }
+    await fetchUsers(false);
   };
 
   return (
@@ -115,11 +144,11 @@ export const UserTable = () => {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={8}
                 value={invitePassword}
                 onChange={(e) => setInvitePassword(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-brand-accent-orange transition-colors text-sm"
-                placeholder="Min 6 characters"
+                placeholder="Min 8 characters"
               />
             </div>
             <div>
@@ -135,6 +164,7 @@ export const UserTable = () => {
             </div>
           </div>
           {inviteError && <p className="text-red-500 text-sm">{inviteError}</p>}
+          {error && <p className="text-red-500 text-sm">{error}</p>}
           <div className="flex gap-3">
             <button
               type="submit"
@@ -157,6 +187,11 @@ export const UserTable = () => {
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 text-red-500">
+          <p className="text-lg font-display font-bold">Failed to load users</p>
+          <p className="text-sm mt-2">{error}</p>
         </div>
       ) : users.length === 0 ? (
         <div className="text-center py-12 text-zinc-400">

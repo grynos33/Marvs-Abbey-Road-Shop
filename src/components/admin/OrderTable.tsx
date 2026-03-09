@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { formatPHP } from '../../lib/formatCurrency';
@@ -23,17 +23,22 @@ export const OrderTable = () => {
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
 
-  const fetchOrders = async () => {
-    setLoading(true);
+  const fetchOrders = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     const { data } = await supabase
       .from('orders')
       .select('id, customer_name, customer_email, customer_phone, shipping_address, shipping_city, shipping_province, shipping_zip, shipping_region, items, subtotal, shipping_fee, total, payment_status, order_status, created_at')
       .order('created_at', { ascending: false });
     setOrders((data as Order[]) ?? []);
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void fetchOrders(false);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchOrders]);
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
