@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 
 type PaymongoEvent = {
@@ -26,7 +26,7 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
-async function readRawBody(req: VercelRequest): Promise<string> {
+async function readRawBody(req: ApiRequest): Promise<string> {
   if (typeof req.body === 'string') return req.body;
   if (req.body && typeof req.body === 'object') return JSON.stringify(req.body);
 
@@ -68,7 +68,7 @@ function verifyWebhookSignature(rawBody: string, signatureHeader: string, secret
   return [testSig, liveSig].filter(Boolean).some((sig) => constantTimeEqual(sig!, expected));
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -164,3 +164,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: message });
   }
 }
+type ApiRequest = IncomingMessage & {
+  method?: string;
+  body?: unknown;
+  headers: IncomingMessage['headers'];
+  on: IncomingMessage['on'];
+};
+
+type ApiResponse = ServerResponse & {
+  status: (code: number) => ApiResponse;
+  json: (body: unknown) => void;
+};

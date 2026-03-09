@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 
 type CheckoutItemInput = {
@@ -39,7 +39,18 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
-function getOrigin(req: VercelRequest): string {
+type ApiRequest = IncomingMessage & {
+  method?: string;
+  body?: unknown;
+  headers: IncomingMessage['headers'];
+};
+
+type ApiResponse = ServerResponse & {
+  status: (code: number) => ApiResponse;
+  json: (body: unknown) => void;
+};
+
+function getOrigin(req: ApiRequest): string {
   const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
   const host = (req.headers['x-forwarded-host'] as string) || req.headers.host;
   if (!host) return '';
@@ -61,7 +72,7 @@ function toPaymongoAmount(amountPhp: number): number {
   return Math.round(amountPhp * 100);
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
