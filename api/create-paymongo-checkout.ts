@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
+import { getClientIp, rateLimit } from './_rate-limit';
 
 type CheckoutItemInput = {
   id: string;
@@ -20,6 +21,15 @@ type CheckoutBody = {
     region: string;
   };
   items: CheckoutItemInput[];
+};
+
+type PaymongoCheckoutResponse = {
+  data?: {
+    id?: string;
+    attributes?: {
+      checkout_url?: string;
+    };
+  };
 };
 
 const SHIPPING_RATES: Record<string, number> = {
@@ -72,9 +82,33 @@ function toPaymongoAmount(amountPhp: number): number {
   return Math.round(amountPhp * 100);
 }
 
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  retries = 3,
+): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const resp = await fetch(url, init);
+    if (resp.ok || resp.status < 500) return resp;
+    if (attempt < retries - 1) {
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+    }
+  }
+  return fetch(url, init);
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const ip = getClientIp(req);
+  const limit = rateLimit(`checkout:${ip}`, 5, 60);
+  if (limit.blocked) {
+    return res.status(429).json({
+      error: 'Too many checkout attempts. Please try again later.',
+      retry_after: limit.retryAfterSec,
+    });
   }
 
   try {
@@ -231,7 +265,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     };
 
     const encodedKey = Buffer.from(`${paymongoSecretKey}:`).toString('base64');
-    const paymongoResp = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
+    const paymongoResp = await fetchWithRetry('https://api.paymongo.com/v1/checkout_sessions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -241,7 +275,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       body: JSON.stringify(paymongoPayload),
     });
 
-    const paymongoJson = await paymongoResp.json();
+    const paymongoJson = (await paymongoResp.json()) as PaymongoCheckoutResponse;
     if (!paymongoResp.ok) {
       await supabase
         .from('orders')
@@ -257,8 +291,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       });
     }
 
-    const checkoutSessionId = paymongoJson?.data?.id as string | undefined;
-    const checkoutUrl = paymongoJson?.data?.attributes?.checkout_url as string | undefined;
+    const checkoutSessionId = paymongoJson?.data?.id;
+    const checkoutUrl = paymongoJson?.data?.attributes?.checkout_url;
 
     await supabase
       .from('orders')

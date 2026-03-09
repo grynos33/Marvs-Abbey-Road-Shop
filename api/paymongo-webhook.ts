@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
+import { getClientIp, rateLimit } from './_rate-limit';
 
 type PaymongoEvent = {
   data?: {
@@ -73,20 +74,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const ip = getClientIp(req);
+  const limit = rateLimit(`webhook:${ip}`, 30, 60);
+  if (limit.blocked) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+
   try {
     const supabaseUrl = getRequiredEnv('SUPABASE_URL');
     const supabaseServiceRoleKey = getRequiredEnv('SUPABASE_SERVICE_ROLE_KEY');
-    const webhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET;
+    const webhookSecret = getRequiredEnv('PAYMONGO_WEBHOOK_SECRET');
 
     const rawBody = await readRawBody(req);
     if (!rawBody) return res.status(400).json({ error: 'Empty payload' });
 
-    if (webhookSecret) {
-      const signatureHeader = req.headers['paymongo-signature'];
-      const signatureValue = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
-      if (!signatureValue || !verifyWebhookSignature(rawBody, signatureValue, webhookSecret)) {
-        return res.status(401).json({ error: 'Invalid webhook signature' });
-      }
+    const signatureHeader = req.headers['paymongo-signature'];
+    const signatureValue = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
+    if (!signatureValue || !verifyWebhookSignature(rawBody, signatureValue, webhookSecret)) {
+      return res.status(401).json({ error: 'Invalid webhook signature' });
     }
 
     const payload = JSON.parse(rawBody) as PaymongoEvent;
@@ -114,9 +119,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (eventType === 'checkout_session.payment.paid') {
       const { data: order } = await supabase
         .from('orders')
-        .select('id, items')
+        .select('id, items, payment_status')
         .eq('id', targetOrderId)
         .maybeSingle();
+
+      if (!order) return res.status(200).json({ ok: true });
+      if (order.payment_status === 'paid') {
+        return res.status(200).json({ ok: true, duplicate: true });
+      }
 
       await supabase
         .from('orders')
@@ -128,7 +138,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         })
         .eq('id', targetOrderId);
 
-      const items = (order?.items as Array<{ id: string; quantity: number }> | null) ?? [];
+      const items = (order.items as Array<{ id: string; quantity: number }> | null) ?? [];
       for (const item of items) {
         const qty = Number(item.quantity) || 0;
         if (!item.id || qty <= 0) continue;
