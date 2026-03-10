@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
-import { getClientIp, rateLimit } from './_rate-limit';
+import { getClientIp, rateLimit } from './_rate-limit.js';
 
 type PaymongoEvent = {
   data?: {
